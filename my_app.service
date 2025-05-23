@@ -1,0 +1,13 @@
+[Unit]
+Description=Details App Service
+After=network.target
+
+[Service]
+User=details_app
+WorkingDirectory=/home/details_app
+ExecStart=/usr/local/bin/pipenv run python app.py
+Restart=always
+Environment=FLASK_ENV=production
+
+[Install]
+WantedBy=multi-user.target
