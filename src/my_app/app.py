@@ -12,8 +12,6 @@ def printos():
     return render_template_string(f"<h1>Welcome, your connection is from a {user_agent} based system.</h1>")
 
 if __name__ == '__main__':
-<<<<<<< HEAD
     app.run(host="0.0.0.0", port=8000, debug=True)
-=======
     app.run(debug=True)
->>>>>>> 04d729a (added service)
+
