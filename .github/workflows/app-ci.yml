@@ -20,8 +20,8 @@ jobs:
     steps:
       - name: Prep notifier
         run: |
-          chmod +x "$NOTIFY" || true
-          "$NOTIFY" "Starting Workflow - $GITHUB_WORKFLOW (#$GITHUB_RUN_NUMBER)" "$SLACK_WEBHOOK"
+          chmod +x $NOTIFY
+          "$NOTIFY" "Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }}" "$SLACK_WEBHOOK"
 
       - name: Checkout
         uses: actions/checkout@v4
