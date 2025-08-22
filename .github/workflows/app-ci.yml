@@ -17,17 +17,21 @@ jobs:
       NOTIFY: ".github/workflows/notify.sh"
       IMAGE: m4gapower/my_app
 
+  
     steps:
-      - name: Prep notifier
-        run: |
-          chmod +x $NOTIFY
-          "$NOTIFY" "Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }}" "$SLACK_WEBHOOK"
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: true
+
+
+      - name: Prep notifier
+        run: |
+          chmod +x $NOTIFY
+          "$NOTIFY" "Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }}" "$SLACK_WEBHOOK"
+
+      
 
       - name: Set up Python 3.10
         uses: actions/setup-python@v5
