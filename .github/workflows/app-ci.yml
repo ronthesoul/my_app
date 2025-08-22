@@ -171,7 +171,7 @@ jobs:
       - name: Replace root index.html from src/
         run: |
           "$NOTIFY" "Starting Step - Copy src/index.html → index.html" "$SLACK_WEBHOOK"
-          if cp src/index.html index.html; then
+          if cp src/my_app/templates/index.html index.html; then
             "$NOTIFY" "Step - Copy index.html ✅ Success" "$SLACK_WEBHOOK"
           else
             "$NOTIFY" "Step - Copy index.html ❌ Failed" "$SLACK_WEBHOOK"
