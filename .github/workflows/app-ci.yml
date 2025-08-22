@@ -29,7 +29,7 @@ jobs:
       - name: Prep notifier
         run: |
           chmod +x $NOTIFY
-          "$NOTIFY" "Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }}" "$SLACK_WEBHOOK"
+          "$NOTIFY" ":loud_sound: Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }} :loud_sound:" "$SLACK_WEBHOOK"
 
       
 
@@ -183,7 +183,7 @@ jobs:
           "$NOTIFY" "Starting Step - Commit & push repo changes" "$SLACK_WEBHOOK"
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git add deployment.yaml index.html
+          git add "${{ github.workspace }}/Deployment/my-app-deployment.yml" index.html
           if git diff --cached --quiet; then
             "$NOTIFY" "Step - Commit & push ✅ No changes to commit" "$SLACK_WEBHOOK"
             exit 0
