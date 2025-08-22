@@ -146,18 +146,18 @@ jobs:
             exit 1
           fi
 
-      - name: Bump image tag in deployment.yaml
+      - name: Bump image tag in deployment.yml
         run: |
-          DEPLOYFILE="/Deployment/my-app-deployment.yaml"
-          "$NOTIFY" "Starting Step - Update $DEPLOYFILE" "$SLACK_WEBHOOK"
+          DEPLOYFILE="/Deployment/my-app-deployment.yml"
+          "$NOTIFY" "Starting Step - Update  Deployment" "$SLACK_WEBHOOK"
           yq -i '
             (.spec.template.spec.containers[] | select(.name=="my-app") | .image)
               = "'"$IMAGE"':" + env(new_tag)
           ' $DEPLOYFILE
           if grep -n "image:" $DEPLOYFILE; then
-            "$NOTIFY" "Step - Update $DEPLOYFILE ✅ Success ($IMAGE:${new_tag})" "$SLACK_WEBHOOK"
+            "$NOTIFY" "Step - Update Deployment ✅ Success ($IMAGE:${new_tag})" "$SLACK_WEBHOOK"
           else
-            "$NOTIFY" "Step - Update $DEPLOYFILE ❌ Failed" "$SLACK_WEBHOOK"
+            "$NOTIFY" "Step - Update Deployment ❌ Failed" "$SLACK_WEBHOOK"
             exit 1
           fi
 
