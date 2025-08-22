@@ -97,41 +97,47 @@ jobs:
             exit 1
           fi
 
-      - name: Get latest Docker Hub tag
-        id: hub
+      - name: Compute next SemVer MINOR tag
         run: |
-          "$NOTIFY" "🔎 Starting Step - Get latest Docker Hub tag" "$SLACK_WEBHOOK"
-          LATEST=$(curl -s "https://hub.docker.com/v2/repositories/$IMAGE/tags/?page_size=1&ordering=last_updated" | jq -r '.results[0].name')
-          if [ -n "$LATEST" ] && [ "$LATEST" != "null" ]; then
-            echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
-            "$NOTIFY" "Step - Get latest Docker Hub tag ✅ Success (Latest: $LATEST)" "$SLACK_WEBHOOK"
+          "$NOTIFY" "🔢 Starting Step - Compute next SemVer MINOR tag" "$SLACK_WEBHOOK"
+          # pull up to 100 tags; keep only x.y.z; sort numerically; pick highest
+          LATEST_SEMVER=$(
+            curl -s "https://hub.docker.com/v2/repositories/$IMAGE/tags/?page_size=100" \
+            | jq -r '[.results[].name
+                      | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))]
+                      | sort_by(split(".")|map(tonumber))
+                      | last // empty'
+          )
+          if [ -z "$LATEST_SEMVER" ]; then
+            BASE="1.0.0"
           else
-            "$NOTIFY" "Step - Get latest Docker Hub tag ❌ Failed" "$SLACK_WEBHOOK"
-            exit 1
+            BASE="$LATEST_SEMVER"
           fi
-
-      - name: Tag image with new version
-        run: |
-          "$NOTIFY" "🏷️ Starting Step - Tag image" "$SLACK_WEBHOOK"
-          LATEST="${{ steps.hub.outputs.latest }}"
-          if [[ "$LATEST" =~ ^[0-9]+$ ]]; then
-            NEW_TAG=$((LATEST+1))
-          else
-            NEW_TAG="1"
-          fi
-          docker tag "$IMAGE:latest" "$IMAGE:$NEW_TAG"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+          NEW_TAG="${MAJOR}.$((MINOR+1)).0"
           echo "new_tag=$NEW_TAG" >> "$GITHUB_ENV"
-          "$NOTIFY" "Step - Tag image ✅ Success (New: $NEW_TAG)" "$SLACK_WEBHOOK"
+          "$NOTIFY" "Step - Compute tag ✅ $BASE → $NEW_TAG" "$SLACK_WEBHOOK"
+
+
+
+
+      - name: Tag image with NEW_TAG
+        run: |
+          "$NOTIFY" "🏷️ Starting Step - Tag image as ${IMAGE}:${new_tag}" "$SLACK_WEBHOOK"
+          if docker tag "$IMAGE:latest" "$IMAGE:${new_tag}"; then
+            "$NOTIFY" "Step - Tag image ✅ ${IMAGE}:${new_tag}" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Tag image ❌ Failed" "$SLACK_WEBHOOK"; exit 1
+          fi
 
       - name: Push image(s)
         run: |
           "$NOTIFY" "📤 Starting Step - Push image(s)" "$SLACK_WEBHOOK"
           echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-          if docker push "$IMAGE:latest" && docker push "$IMAGE:${{ env.new_tag }}"; then
-            "$NOTIFY" "Step - Push image(s) ✅ Success" "$SLACK_WEBHOOK"
+          if docker push "$IMAGE:latest" && docker push "$IMAGE:${new_tag}"; then
+            "$NOTIFY" "Step - Push image(s) ✅ $IMAGE:latest & $IMAGE:${new_tag}" "$SLACK_WEBHOOK"
           else
-            "$NOTIFY" "Step - Push image(s) ❌ Failed" "$SLACK_WEBHOOK"
-            exit 1
+            "$NOTIFY" "Step - Push image(s) ❌ Failed" "$SLACK_WEBHOOK"; exit 1
           fi
 
       - name: Install yq
@@ -148,13 +154,14 @@ jobs:
 
       - name: Bump image tag in deployment.yml
         run: |
-          DEPLOYFILE="/Deployment/my-app-deployment.yml"
-          "$NOTIFY" "Starting Step - Update  Deployment" "$SLACK_WEBHOOK"
+          DEPLOYFILE="${{ github.workspace }}/Deployment/my-app-deployment.yml"
+          "$NOTIFY" "Starting Step - Update Deployment ($DEPLOYFILE)" "$SLACK_WEBHOOK"
           yq -i '
             (.spec.template.spec.containers[] | select(.name=="my-app") | .image)
               = "'"$IMAGE"':" + env(new_tag)
-          ' $DEPLOYFILE
-          if grep -n "image:" $DEPLOYFILE; then
+          ' "$DEPLOYFILE"
+
+          if grep -n "image:" "$DEPLOYFILE"; then
             "$NOTIFY" "Step - Update Deployment ✅ Success ($IMAGE:${new_tag})" "$SLACK_WEBHOOK"
           else
             "$NOTIFY" "Step - Update Deployment ❌ Failed" "$SLACK_WEBHOOK"
