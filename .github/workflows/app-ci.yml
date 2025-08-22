@@ -29,7 +29,7 @@ jobs:
       - name: Prep notifier
         run: |
           chmod +x $NOTIFY
-          "$NOTIFY" ":loud_sound: Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }} :loud_sound:" "$SLACK_WEBHOOK"
+          "$NOTIFY" ":bell: Starting ${{ github.event.repository.name }} CI - Run number: (#$GITHUB_RUN_NUMBER) Commit: ${{ github.event.head_commit.message }} :bell:" "$SLACK_WEBHOOK"
 
       
 
