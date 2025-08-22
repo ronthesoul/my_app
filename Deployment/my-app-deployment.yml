@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+        app.kubernetes.io/name: my-app
+        app.kubernetes.io/instance: my-app
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: my-app-suite
+        app.kubernetes.io/managed-by: Helm
+    spec:
+      terminationGracePeriodSeconds: 600
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1001
+        runAsGroup: 1001
+        runAsNonRoot: true
+      containers:
+        - name: my-app
+          image: m4gapower/my_app:1.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+          resources:
+            limits:
+              memory: "500Mi"
+            requests:
+              memory: "500Mi"
+              cpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+         

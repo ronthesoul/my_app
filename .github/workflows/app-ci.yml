@@ -1,0 +1,191 @@
+name: Test and deploy my app
+
+on:
+  push:
+    paths:
+      - "src/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+      NOTIFY: ".github/workflows/notify.sh"
+      IMAGE: m4gapower/my_app
+
+    steps:
+      - name: Prep notifier
+        run: |
+          chmod +x "$NOTIFY" || true
+          "$NOTIFY" "Starting Workflow - $GITHUB_WORKFLOW (#$GITHUB_RUN_NUMBER)" "$SLACK_WEBHOOK"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies for testing
+        run: |
+          "$NOTIFY" "Starting Step - Install dependencies for testing" "$SLACK_WEBHOOK"
+          if python -m pip install --upgrade pip \
+            && { [ -f requirements.txt ] && pip install -r requirements.txt || true; } \
+            && pip install pytest flake8 jq; then
+            "$NOTIFY" "Step - Install dependencies for testing ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Install dependencies for testing ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Lint (flake8)
+        env:
+          LINT_PATH: src/my_app
+        run: |
+          "$NOTIFY" "Starting Step - Lint (flake8) on $LINT_PATH" "$SLACK_WEBHOOK"
+          if flake8 "$LINT_PATH"; then
+            "$NOTIFY" "Step - Lint (flake8) ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Lint (flake8) ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Build Docker image
+        run: |
+          "$NOTIFY" "🐳 Starting Step - Build Docker image" "$SLACK_WEBHOOK"
+          if docker build -t "$IMAGE:latest" .; then
+            "$NOTIFY" "Step - Build Docker image ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Build Docker image ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Run & Test container
+        run: |
+          "$NOTIFY" "🧪 Starting Step - Run & Test container" "$SLACK_WEBHOOK"
+          docker run -d --rm -p 8000:8000 --name my_app_test "$IMAGE:latest"
+          sleep 5
+          if curl -fsS http://localhost:8000/ > /dev/null; then
+            "$NOTIFY" "Step - Run & Test container ✅ Success (responded on :8000)" "$SLACK_WEBHOOK"
+            docker stop my_app_test
+          else
+            "$NOTIFY" "Step - Run & Test container ❌ Failed (no response on :8000)" "$SLACK_WEBHOOK"
+            docker logs my_app_test || true
+            docker stop my_app_test
+            exit 1
+          fi
+
+      - name: Get latest Docker Hub tag
+        id: hub
+        run: |
+          "$NOTIFY" "🔎 Starting Step - Get latest Docker Hub tag" "$SLACK_WEBHOOK"
+          LATEST=$(curl -s "https://hub.docker.com/v2/repositories/$IMAGE/tags/?page_size=1&ordering=last_updated" | jq -r '.results[0].name')
+          if [ -n "$LATEST" ] && [ "$LATEST" != "null" ]; then
+            echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+            "$NOTIFY" "Step - Get latest Docker Hub tag ✅ Success (Latest: $LATEST)" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Get latest Docker Hub tag ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Tag image with new version
+        run: |
+          "$NOTIFY" "🏷️ Starting Step - Tag image" "$SLACK_WEBHOOK"
+          LATEST="${{ steps.hub.outputs.latest }}"
+          if [[ "$LATEST" =~ ^[0-9]+$ ]]; then
+            NEW_TAG=$((LATEST+1))
+          else
+            NEW_TAG="1"
+          fi
+          docker tag "$IMAGE:latest" "$IMAGE:$NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> "$GITHUB_ENV"
+          "$NOTIFY" "Step - Tag image ✅ Success (New: $NEW_TAG)" "$SLACK_WEBHOOK"
+
+      - name: Push image(s)
+        run: |
+          "$NOTIFY" "📤 Starting Step - Push image(s)" "$SLACK_WEBHOOK"
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          if docker push "$IMAGE:latest" && docker push "$IMAGE:${{ env.new_tag }}"; then
+            "$NOTIFY" "Step - Push image(s) ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Push image(s) ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Install yq
+        run: |
+          "$NOTIFY" "Starting Step - Install yq" "$SLACK_WEBHOOK"
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.45.4/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          if yq --version; then
+            "$NOTIFY" "Step - Install yq ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Install yq ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Bump image tag in deployment.yaml
+        run: |
+          "$NOTIFY" "Starting Step - Update deployment.yaml" "$SLACK_WEBHOOK"
+          yq -i '
+            (.spec.template.spec.containers[] | select(.name=="my-app") | .image)
+              = "'"$IMAGE"':" + env(new_tag)
+          ' deployment.yaml
+          if grep -n "image:" deployment.yaml; then
+            "$NOTIFY" "Step - Update deployment.yaml ✅ Success ($IMAGE:${new_tag})" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Update deployment.yaml ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Replace root index.html from src/
+        run: |
+          "$NOTIFY" "Starting Step - Copy src/index.html → index.html" "$SLACK_WEBHOOK"
+          if cp src/index.html index.html; then
+            "$NOTIFY" "Step - Copy index.html ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Copy index.html ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Commit & push manifest changes (single step with notify)
+        run: |
+          "$NOTIFY" "Starting Step - Commit & push repo changes" "$SLACK_WEBHOOK"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git add deployment.yaml index.html
+          if git diff --cached --quiet; then
+            "$NOTIFY" "Step - Commit & push ✅ No changes to commit" "$SLACK_WEBHOOK"
+            exit 0
+          fi
+          if git commit -m "chore(ci): bump image to ${IMAGE}:${{ env.new_tag }} & update index.html" && git push; then
+            "$NOTIFY" "Step - Commit & push ✅ Success" "$SLACK_WEBHOOK"
+          else
+            "$NOTIFY" "Step - Commit & push ❌ Failed" "$SLACK_WEBHOOK"
+            exit 1
+          fi
+
+      - name: Final pipeline result
+        if: success()
+        run: |
+          $NOTIFY "🚀 Pipeline completed successfully!" $SLACK_WEBHOOK
+
+      - name: Final pipeline failure
+        if: failure()
+        run: |
+          $NOTIFY "🔥 Pipeline failed!" $SLACK_WEBHOOK
