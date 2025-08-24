@@ -206,30 +206,6 @@ jobs:
           "$NOTIFY" "$MSG" "$SLACK_WEBHOOK"
       
 
-      - name: Summarize changes
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const before = context.payload.before;
-            const after = context.sha;
-            const {owner, repo} = context.repo;
-            const res = await github.rest.repos.compareCommits({owner, repo, base: before, head: after});
-            const files = res.data.files || [];
-            const by = s => files.filter(f => f.status === s).map(f => f.filename);
-            const added = by('added'), modified = by('modified'), removed = by('removed'), renamed = by('renamed');
-
-            const compareUrl = `https://github.com/${owner}/${repo}/compare/${before}...${after}`;
-            await core.summary
-              .addHeading('Changes in this push')
-              .addLink('Compare on GitHub', compareUrl)
-              .addHeading('Added', 3).addList(added.length ? added : ['—'])
-              .addHeading('Modified', 3).addList(modified.length ? modified : ['—'])
-              .addHeading('Removed', 3).addList(removed.length ? removed : ['—'])
-              .addHeading('Renamed', 3).addList(renamed.length ? renamed : ['—'])
-              .write();
-
-
-
 
       - name: Final pipeline result
         if: success()
