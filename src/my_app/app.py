@@ -14,7 +14,7 @@ def printos():
     user_agent = request.headers.get("User-Agent")
     # keep line short; let Jinja inject the value
     return render_template_string(
-        "<h1>Welcome!, your connection is from a {{ ua }} based system.</h1>",
+        "<h1>Welcome!!, your connection is from a {{ ua }} based system.</h1>",
         ua=user_agent,
     )
 
